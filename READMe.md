@@ -2,48 +2,6 @@
 
 `TensorNetPlot` is a python package to help researchers fast create Tensor Network diagram.
 
-
-```python
-import plotly.io as pio
-#from IPython.display import Image
-```
-
-
-```python
-from TensorNetPlot_element import *
-def get_chain_mps(name,Tensor_Type,num=4,layer=2,vertical=False,**kargs):
-    mps1=GridGraph(name)
-    l_bra = '├─' if vertical else '─┬─'
-    r_bra = '─┤' if vertical else '─┴─'
-    bdirc = 'ulrd' if vertical else 'ludr'
-    for j in range(layer):
-        for i in range(num):
-            if   j ==       0:
-                mps1.add_node(Tensor_Type(f"{i}{j}",[2]+[3]+[2],bra_direction=l_bra,**kargs))
-            elif j == layer-1:
-                mps1.add_node(Tensor_Type(f"{i}{j}",[2]+[3]+[2],bra_direction=r_bra,**kargs))
-            else:
-                mps1.add_node(Tensor_Type(f"{i}{j}",[2]+[3]+[3]+[2],bond_direction=bdirc,**kargs))
-        for i1,i2 in zip(range(num-1),range(1,num)):
-            #print(f"{i1}{j}",f"{i2}{j}")
-            mps1.add_edge((f"{i1}{j}",-1),(f"{i2}{j}",0))
-
-    for j1,j2 in zip(range(layer-1),range(1,layer)):
-        for i in range(num):
-            mps1.add_edge((f"{i}{j1}",-2),(f"{i}{j2}",1))
-    return mps1    
-def contract_TN(TN_list,connections,name=None):
-    new_name = '+'.join([TN.name for TN in TN_list]) if name is None else name
-    new_TN   = GridGraph(new_name)
-    for TN in TN_list:
-        for new_name, new_node in TN.nodes.items():
-            assert new_name not in new_TN.nodes
-            new_TN.nodes[new_name] = new_node
-        for source_c,target_c in connections:
-            new_TN.add_edge(source_c,target_c)
-    return new_TN
-```
-
 ### Example
 
 The `Network` is store as 「Graph」-「Node」-「Bond」object.
@@ -65,6 +23,8 @@ tns.layout(bond_width=1,bond_length=1,spacing=1)
 fig=tns.draw(show_name=True)
 ```
 
+![image-20210617025651231](imgs/image-20210617025651231.png)
+
 ### Available Type
 
 Now we realize following Tensor Unit
@@ -77,6 +37,9 @@ Now we realize following Tensor Unit
 
 
 ```python
+from TensorNetPlot_element import Rectangle_T,Circle_T,Flag_T,Triangle_AS_T
+from TensorNetPlot_utils import get_chain_mps
+import plotly.graph_objects as go
 mps_list = [get_chain_mps(name,_type,5,layer=1,main_direction ='r') for name,_type in [ 
     ['Rectangle',Rectangle_T],['Circle',Circle_T],['Flag',Flag_T],['Triangle',Triangle_AS_T]
 ]]
@@ -105,9 +68,11 @@ for obj in objects:fig.add_trace(obj)
 #fig.show()
 ```
 
+<img src="imgs/image-20210617025942820.png" alt="image-20210617025942820" style="zoom:50%;" />
+
 ### Contract Two Tensor Network
 
-contract mulitiple tensor networks will create new Graph and put all node/edge into this 'big' Graph.
+contract multiple tensor networks will create new Graph and put all node/edge into this 'big' Graph.
 
 Then we need assign the contracted bond. We can assign when 
 
@@ -118,6 +83,8 @@ the `bond (a)` in `bond pair ([a,b])` can either be the bond's name or the bond 
 
 
 ```python
+from TensorNetPlot_element import Flag_T,Circle_T
+from TensorNetPlot_utils import get_chain_mps,contract_TN
 mps1 = get_chain_mps('L',Flag_T,num=4,layer=2,vertical=False,main_direction='r',color='#FF9900')
 mps2 = get_chain_mps('C',Circle_T,num=1,layer=2,vertical=False,color='#FC0080')
 mps3 = get_chain_mps('R',Flag_T,num=4,layer=2,vertical=False,main_direction='l',color='#00CC96')
@@ -136,22 +103,25 @@ mps.layout(bond_width=1,bond_length=1,spacing=1)
 fig=mps.draw(show_name=True)
 ```
 
+![image-20210617030055156](imgs/image-20210617030055156.png)
+
 ### Delte Node
 
 Delte the node will free the contracted bond to free bond
 
 
 ```python
+from TensorNetPlot_utils import get_chain_mps,contract_TN
+from TensorNetPlot_element import Rectangle_T
 mps = get_chain_mps('L',Rectangle_T,num=4,layer=3,vertical=False)
 mps.delte_node('L_11')
-```
 
-
-```python
 mps.reset_layout()
 mps.layout(bond_width=1,bond_length=1,spacing=1)
-fig=mps.draw()
+mps.draw()
 ```
+
+<img src="imgs/image-20210617030149718.png" alt="image-20210617030149718" style="zoom:50%;" />
 
 ## Advance Feature
 
@@ -161,6 +131,8 @@ support insert big tensor block into left-right layout tensor network
 
 
 ```python
+from TensorNetPlot_utils import get_chain_mps,contract_TN
+from TensorNetPlot_element import GridGraph,Flag_T,OneSideBigRectangle_T
 mps1 = get_chain_mps('L',Flag_T,num=4,layer=2,vertical=False,main_direction='r',color='#FF9900')
 mps1.layout(bond_width=1,bond_length=1,spacing=1)
 mps2 = GridGraph('C')
@@ -180,6 +152,8 @@ mps.reset_layout()
 mps.layout(bond_width=1,bond_length=1,spacing=1)
 fig=mps.draw(show_name=True)
 ```
+
+![image-20210617030244254](imgs/image-20210617030244254.png)
 
 ## TODO
 
