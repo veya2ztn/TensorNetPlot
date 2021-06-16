@@ -1,3 +1,4 @@
+from TensorNetPlot_base import GridGraph
 
 def get_chain_mps(name,Tensor_Type,num=4,layer=2,vertical=False,**kargs):
     mps1=GridGraph(name)
