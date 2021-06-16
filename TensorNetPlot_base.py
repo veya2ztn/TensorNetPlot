@@ -44,8 +44,10 @@ class Bond:
         return new_pos[1]
 
     def default_color(self):
-        bond_kargs   = {"fillcolor":'#EF553B','line_color':'#EF553B'}
+        color = '#EF553B' #if self.color == "default" else self.color
+        bond_kargs   = {"fillcolor":color,'line_color':color}
         return bond_kargs
+
     def set_postion(self,x,y=None,update=False):
 
         if y is not None:
@@ -58,6 +60,7 @@ class Bond:
                 self.y = y
         else:
             if self.x is not None and (self.layoutQ and not update):
+
                 assert self.x == x[0]
                 assert self.y == x[1]
             else:
@@ -93,14 +96,29 @@ class TN_Tensor:
     x = y = z = None
     type_name = "Tensor"
     vertex_num= None
-    def __init__(self,name,dims=(2,3,2),bond_direction=None,bra_direction="─┬─",**kargs):
+    def __init__(self,name,dims=(2,3,2),bond_direction=None,bra_direction="─┬─",color="default",**kargs):
         self.dims             = dims
         self.nickname         = name
         self.layoutQ          = False
         self.host             = None
+        self.color            = color
         self.bond_direction   = self.set_direction(bra_direction) if bond_direction is None else bond_direction
         self.bond_orientation = self.set_orientation(self.bond_direction)
         self.bonds = [Bond(self,i,dim,dirc,direction) for i,(dim,dirc,direction) in enumerate(zip(dims,self.bond_direction,self.bond_orientation))]
+
+    def num_of_bonds_for(self,d):return self.bond_direction.count(d)
+
+    @property
+    def num_of_u_bonds(self):return self.bond_direction.count('u')
+    @property
+    def num_of_d_bonds(self):return self.bond_direction.count('d')
+    @property
+    def num_of_r_bonds(self):return self.bond_direction.count('r')
+    @property
+    def num_of_l_bonds(self):return self.bond_direction.count('l')
+
+    def set_orientation(self,direction):
+        return [self.orientation_map(symbol) for symbol in direction]
     @property
     def name(self):
         if self.host:
@@ -191,7 +209,12 @@ class TN_Tensor:
     def assign_host(self,host_name):
         self.host = host_name
 
-
+    def set_all_vertex_and_bond(self,all_vertex,bond_length,**kargs):
+        self.vertex_pos = all_vertex
+        for bond,pos in zip(self.bonds, all_vertex[-len(self.bonds):]):
+            bond.set_postion(pos,**kargs)
+            bond.length=bond_length
+        
     def __repr__(self):
         d_string = ",".join([str(d) for d in self.dims])
         strings = f'''{self.type_name}:{self.name}|({d_string}) {self.bond_direction_string} link_nodes:{self.link_nodes} pos:{(self.x,self.y)}->{(self.x_end,self.y_end)}'''
@@ -309,7 +332,8 @@ class GridGraph(Graph):
         return [bond for bond in self.bonds if (bond.partner is None and bond.relvent_dirc==direction)]
 
     def default_color(self):
-        contract_kargs = {"fillcolor":'#1F77B4','line_color':'#1F77B4'}
+        color = '#1F77B4' #if self.color == "default" else self.color
+        contract_kargs = {"fillcolor":color,'line_color':color}
         return contract_kargs
 
     def depoly(self,fig=None,**kargs):
@@ -330,20 +354,9 @@ class GridGraph(Graph):
 
     def draw(self,show_name=False,**kargs):
         fig = go.Figure()
-        fig.update_yaxes(
-            scaleanchor = "x",
-            scaleratio = 1,
-          )
-        axis = dict(showline=False, # hide axis line, grid, ticklabels and  title
-                        zeroline=False,
-                        showgrid=False,
-                        showticklabels=False,
-                        )
-        fig.update_layout(showlegend=False,
-                          xaxis=axis,
-                          yaxis=axis,
-                          plot_bgcolor='rgb(248,248,248)'
-                          )
+
+        axis = dict(showline=False, zeroline=False,showgrid=False,showticklabels=False,)
+        fig.update_layout(showlegend=False,xaxis=axis,yaxis=axis,plot_bgcolor='white')
         fig.update_layout(
             hoverlabel=dict(
                 bgcolor="white",
@@ -351,6 +364,8 @@ class GridGraph(Graph):
                 font_family="Rockwell"
             )
         )
+        fig.update_xaxes(fixedrange=True)
+        fig.update_yaxes(scaleanchor = "x",scaleratio = 1,)
         objects = self.depoly(fig,show_name=show_name,**kargs)
         for obj in objects:fig.add_trace(obj)
         return fig

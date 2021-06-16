@@ -9,16 +9,6 @@ class Rectangle_T(TN_Tensor):
     v2 = np.array([0,1])
     vertex_num = 4
 
-    def num_of_bonds_for(self,d):return self.bond_direction.count(d)
-
-    @property
-    def num_of_u_bonds(self):return self.bond_direction.count('u')
-    @property
-    def num_of_d_bonds(self):return self.bond_direction.count('d')
-    @property
-    def num_of_r_bonds(self):return self.bond_direction.count('r')
-    @property
-    def num_of_l_bonds(self):return self.bond_direction.count('l')
 
     @property
     def shape_vertex_pos(self):
@@ -34,6 +24,15 @@ class Rectangle_T(TN_Tensor):
         pos3= pos0 + w*v1 + 0*v2
         return np.stack([pos0,pos1,pos2,pos3])
 
+    def orientation_map(self,symbol):
+        v1=self.v1
+        v2=self.v2
+        orientation_map = {'u': v2,
+                           'd':-v2,
+                           'l':-v1,
+                           'r': v1}
+        return orientation_map[symbol]
+
     def set_direction(self,bra):
         assert self.rank > 1
         if (bra == '─┬─') or (bra == 'd'):
@@ -45,17 +44,6 @@ class Rectangle_T(TN_Tensor):
         if (bra == '─┤') or (bra == 'l'):
             return 'u'+'l' *(self.rank-2)+'d'
         raise NotImplementedError
-
-    def set_orientation(self,direction):
-        return [self.orientation_map(symbol) for symbol in direction]
-
-    def orientation_map(self,direction_symbol):
-        if direction_symbol == 'u':return  self.v2
-        if direction_symbol == 'd':return -self.v2
-        if direction_symbol == 'l':return -self.v1
-        if direction_symbol == 'r':return  self.v1
-        raise NotImplementedError
-
 
     def get_all_vertex_relative(self,w,h,bond_distribution_on_side=None):
         v1 = self.v1
@@ -92,7 +80,7 @@ class Rectangle_T(TN_Tensor):
 
     def set_postion_from_bond(self,bond_idx,bond_width=1,bond_length=1,**kargs):
         vertex_idx = bond_idx + self.vertex_num
-        self.set_location(self.bonds[bond_idx].pos,vertex_idx,bond_width=1,bond_length=1,**kargs)
+        self.set_location(self.bonds[bond_idx].pos,vertex_idx,bond_width=bond_width,bond_length=bond_length,**kargs)
 
     def set_location(self,pos,vertex_idx,bond_width=1,bond_length=1,w=None,h=None,update=False,bond_distribution_on_side=None):
         w = bond_width*max(1,self.num_of_r_bonds,self.num_of_l_bonds) if w is None else w
@@ -100,19 +88,17 @@ class Rectangle_T(TN_Tensor):
 
         all_vertex = self.get_all_vertex_relative(w,h,bond_distribution_on_side=bond_distribution_on_side)
         all_vertex = all_vertex - all_vertex[vertex_idx] + pos
-        self.vertex_pos = all_vertex
         self.x,self.y   = all_vertex[0]
         self.w = w
         self.h = h
-        for bond,pos in zip(self.bonds, all_vertex[-len(self.bonds):]):
-            bond.set_postion(pos)
-            bond.length=bond_length
+        self.set_all_vertex_and_bond(all_vertex,bond_length)
         self.layoutQ = True
 
     def default_color(self,_type):
         if _type == 'vector':return {"fillcolor":'#B6E880','line_color':'#B6E880'}
         if _type == 'matrix':return {"fillcolor":'#DC3912','line_color':'#DC3912'}
-        if _type == 'tensor':return {"fillcolor":'#3366CC','line_color':'#3366CC'}
+        color = '#3366CC' if self.color == "default" else self.color
+        if _type == 'tensor':return {"fillcolor":color,'line_color':color}
         raise NotImplementedError
 
 
@@ -191,8 +177,10 @@ class OneSideBigRectangle_T(Rectangle_T):
             w = bond_width*max(1,self.num_of_u_bonds,self.num_of_d_bonds)
             h = length
 
-        distribution_ratio = [(np.dot(orientation_horizon,bond.pos)-min_length)/length for bond in same_direction_bond]
+        self.w = w
+        self.h = h
 
+        distribution_ratio = [(np.dot(orientation_horizon,bond.pos)-min_length)/length for bond in same_direction_bond]
         bond_distribution_on_side = {}
         bond_distribution_on_side[anchor_bond.relvent_dirc] = distribution_ratio
         if  anchor_bond.relvent_dirc =='u':oppsite_direction = 'd'
@@ -204,15 +192,14 @@ class OneSideBigRectangle_T(Rectangle_T):
             bond_distribution_on_side[oppsite_direction] = distribution_ratio
 
         bond = anchor_bond
+
+        vertex_idx = self.vertex_num + bond_idx
         all_vertex = self.get_all_vertex_relative(w,h,bond_distribution_on_side=bond_distribution_on_side)
-        all_vertex = all_vertex - all_vertex[2+bond_idx] + bond.pos
-        self.x,self.y = all_vertex[0]
-        self.w = w
-        self.h = h
-        for bond,pos in zip(self.bonds, all_vertex[2:]):
-            bond.set_postion(pos)
-            bond.length=bond_length
-        self.layoutQ= True
+        all_vertex = all_vertex - all_vertex[vertex_idx] + bond.pos
+        self.x,self.y   = all_vertex[0]
+
+        self.set_all_vertex_and_bond(all_vertex,bond_length)
+        self.layoutQ = True
 
 class Flag_T(Rectangle_T):
     '''
@@ -228,7 +215,7 @@ class Flag_T(Rectangle_T):
     v2 = np.array([0,1])
     vertex_num = 5
     def __init__(self,name,dims=(2,3,2),bond_direction=None,bra_direction="─┬─",main_direction="r",**kargs):
-        super().__init__(name,dims=dims,bond_direction=bond_direction,bra_direction=bra_direction)
+        super().__init__(name,dims=dims,bond_direction=bond_direction,bra_direction=bra_direction,**kargs)
         self.main_direction   = main_direction
         assert self.bond_direction.count(main_direction)==1
 
@@ -310,7 +297,7 @@ class Circle_T(Rectangle_T):
     v2 = np.array([0,1])
     vertex_num = 2
     def __init__(self,name,dims=(2,3,2),bond_direction=None,bra_direction="─┬─",**kargs):
-        super().__init__(name,dims=dims,bond_direction=bond_direction,bra_direction=bra_direction)
+        super().__init__(name,dims=dims,bond_direction=bond_direction,bra_direction=bra_direction,**kargs)
         for d in 'lurd':
             assert self.num_of_bonds_for(d) <= 1
 
@@ -371,26 +358,21 @@ class Triangle_T(TN_Tensor):
     \    /
      \  /
     '''
-    type_name = "Triangle"
+    type_name = "Triangle_T"
     vertex_num = 3
     v1 = np.array([1,0])
     v2 = np.array([0,1])
-    def __init__(self,name,dims=(2,3,2),bond_direction='123',rotation=0,**kargs):
+    orientation_map = {'u':v2,
+                       'l':-np.sin(np.pi/3)*v1 - np.cos(np.pi/3)*v2,
+                       'r':+np.sin(np.pi/3)*v1 - np.cos(np.pi/3)*v2,
+                       'd':-v2}
+    def __init__(self,name,dims=(2,3,2),bond_direction='ldr',rotation=0,**kargs):
         theta = np.pi*rotation/180
         rotation_matrix = np.array([[np.cos(theta),np.sin(theta)],[-np.sin(theta),np.cos(theta)]])
         self.v1 = np.dot(rotation_matrix,self.v1)
         self.v2 = np.dot(rotation_matrix,self.v2)
         super().__init__(name,dims=dims,bond_direction=bond_direction,bra_direction=None)
-
-    @property
-    def num_of_1_bonds(self):return self.bond_direction.count('1')
-    @property
-    def num_of_2_bonds(self):return self.bond_direction.count('2')
-    @property
-    def num_of_3_bonds(self):return self.bond_direction.count('3')
-
-    def num_of_bonds_for(self,d):return self.bond_direction.count(str(d))
-
+        assert self.num_of_d_bonds <= 1
     @property
     def shape_vertex_pos(self):
         x0 = self.x
@@ -405,19 +387,17 @@ class Triangle_T(TN_Tensor):
         pos3= pos0 + w*v1 + 0*v2
         return np.stack([pos0,pos1,pos2,pos3])
 
-    def set_orientation(self,direction):
-        return [self.orientation_map(symbol) for symbol in direction]
-
-    def orientation_map(self,direction_symbol):
-        v1 = self.v1
-        v2 = self.v2
-        if direction_symbol == '1':return   v2
-        if direction_symbol == '2':return  -np.sin(np.pi/3)*v1 - np.cos(np.pi/3)*v2
-        if direction_symbol == '3':return  +np.sin(np.pi/3)*v1 - np.cos(np.pi/3)*v2
-        raise NotImplementedError
-
+    def orientation_map(self,symbol):
+        v1=self.v1
+        v2=self.v2
+        orientation_map = {'u':v2,
+                           'l':-np.sin(np.pi/3)*v1 - np.cos(np.pi/3)*v2,
+                           'r':+np.sin(np.pi/3)*v1 - np.cos(np.pi/3)*v2,
+                           'd':-v2}
+        return orientation_map[symbol]
     def default_color(self):
-        contract_kargs = {"fillcolor":'#1F77B4','line_color':'#1F77B4'}
+        color = '#1F77B4' if self.color == "default" else self.color
+        contract_kargs = {"fillcolor":color,'line_color':color}
         return contract_kargs
 
     def get_all_vertex_relative(self,w1,w2,w3,bond_distribution_on_side=None):
@@ -432,22 +412,24 @@ class Triangle_T(TN_Tensor):
 
 
         if bond_distribution_on_side is None: bond_distribution_on_side = {}
-        for d in '123':
+        for d in 'lur':
             if d not in bond_distribution_on_side:
                 num_of_bonds_for_d = self.num_of_bonds_for(d)
                 bond_distribution_on_side[d] = (np.arange(num_of_bonds_for_d)+1)/(num_of_bonds_for_d+1)
-        now_1 = now_2 = now_3 = 0
+        now_l = now_r = now_d = now_u = 0
         for bond in self.bonds:
             d = bond.relvent_dirc
-            if d=='1':
-                new_pos = pos1 + bond_distribution_on_side[d][now_1]*(pos2-pos1)
-                now_1+=1
-            elif d=='2':
-                new_pos = pos3 + bond_distribution_on_side[d][now_2]*(pos1-pos3)
-                now_2+=1
-            elif d=='3':
-                new_pos = pos2 + bond_distribution_on_side[d][now_3]*(pos3-pos2)
-                now_3+=1
+            if   d=='u':
+                new_pos = pos1 + bond_distribution_on_side[d][now_l]*(pos2-pos1)
+                now_l+=1
+            elif d=='l':
+                new_pos = pos3 + bond_distribution_on_side[d][now_d]*(pos1-pos3)
+                now_d+=1
+            elif d=='r':
+                new_pos = pos2 + bond_distribution_on_side[d][now_r]*(pos3-pos2)
+                now_r+=1
+            elif d=='d':
+                new_pos = pos3
             else:
                 raise NotImplementedError
             all_vertex.append(new_pos)
@@ -461,22 +443,20 @@ class Triangle_T(TN_Tensor):
 
     def set_location(self,pos,vertex_idx,bond_width=1,bond_length=1,w=None,update=False,bond_distribution_on_side=None):
         if w is None:
-            w1 = bond_width*max(1,self.num_of_1_bonds)
-            w2 = bond_width*max(1,self.num_of_2_bonds)
-            w3 = bond_width*max(1,self.num_of_3_bonds)
+            w1 = bond_width*max(1,self.num_of_u_bonds)
+            w2 = bond_width*max(1,self.num_of_l_bonds)
+            w3 = bond_width*max(1,self.num_of_r_bonds)
         elif isinstance(w,list) or isinstance(w,tuple):
             w1,w2,w3 = w
         else:
             w1=w2=w3 = w
         all_vertex = self.get_all_vertex_relative(w1,w2,w3,bond_distribution_on_side=bond_distribution_on_side)
-        all_vertex = all_vertex - all_vertex[vertex_idx] + pos
-        self.vertex_pos = all_vertex
-        self.x,self.y   = all_vertex[0]
+        all_vertex      = all_vertex - all_vertex[vertex_idx] + pos
         self.w = w1
         self.h = w1
-        for bond,pos in zip(self.bonds, all_vertex[-len(self.bonds):]):
-            bond.set_postion(pos)
-            bond.length=bond_length
+        self.x,self.y   = all_vertex[0]
+
+        self.set_all_vertex_and_bond(all_vertex,bond_length)
         self.layoutQ = True
 
     def deploy(self,fig,show_name=False,**kargs):
@@ -491,3 +471,35 @@ class Triangle_T(TN_Tensor):
         if fig is not None and show_name:fig.add_annotation(x=xc , y=yc,text=self.name,showarrow=False)
         objects.append(obj)
         return objects
+
+class Triangle_AS_T(Triangle_T):
+    '''
+    ------
+    \    /
+     \  /
+    '''
+    type_name = "Triangle_AS"
+    v1 = np.array([1,0])
+    v2 = np.array([0,1])
+
+    def __init__(self,name,dims=(2,3,2),bond_direction=None,main_direction="r",**kargs):
+
+        if   main_direction =='r':
+            rotation_angel = - 90
+            bond_direction = 'uld' if bond_direction is None else bond_direction
+        elif main_direction =='d':
+            rotation_angel = 0
+            bond_direction = 'ldr' if bond_direction is None else bond_direction
+        elif main_direction =='l':
+            rotation_angel = + 90
+            bond_direction = 'dru' if bond_direction is None else bond_direction
+        elif main_direction =='u':
+            rotation_angel = +180
+            bond_direction = 'rul' if bond_direction is None else bond_direction
+        else:raise NotImplementedError
+        super().__init__(name,dims=dims,bond_direction=bond_direction,rotation =rotation_angel, **kargs)
+    def orientation_map(self,symbol):
+        v1=self.v1
+        v2=self.v2
+        orientation_map = {'u': v2,'d':-v2,'l':-v1,'r': v1}
+        return orientation_map[symbol]
